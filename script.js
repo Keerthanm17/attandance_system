@@ -195,6 +195,13 @@ function getLatestSessionByUser(records) {
   return [...latestByUser.values()];
 }
 
+function getRecordsForCurrentUsers(records) {
+  if (!lastUsers.length) return records;
+
+  const currentUserIds = new Set(lastUsers.map(user => user.uid).filter(Boolean));
+  return records.filter(record => currentUserIds.has(record.uid));
+}
+
 async function callApi(path, method = "GET", body = null) {
   const opts = {
     method,
@@ -302,8 +309,7 @@ function showDashboardView(data) {
     attendanceDate.value = todayLocal();
     statDate.textContent = todayLocal();
     startAdminRefresh();
-    fetchAttendance();
-    fetchUsers(true);
+    fetchUsers(true).finally(() => fetchAttendance());
     fetchRequests(true);
   } else {
     adminSection.style.display = "none";
@@ -568,10 +574,11 @@ async function fetchAttendance(isBackgroundRefresh = false) {
   try {
     const data = await callApi(`/api/attendance?date=${date}`);
     const attendanceRecords = data.records || [];
+    const currentUserRecords = getRecordsForCurrentUsers(attendanceRecords);
     lastRecords = attendanceRecords;
     renderAttendanceTable(attendanceRecords);
-    renderLoginActivity(attendanceRecords);
-    updateStats(attendanceRecords, date);
+    renderLoginActivity(currentUserRecords);
+    updateStats(currentUserRecords, date);
     adminRefreshStatus.textContent = `Last updated at ${formatTime(data.generated_at || new Date().toISOString())}`;
   } catch (err) {
     attendanceError.style.display = "block";
@@ -914,6 +921,7 @@ usersTbody.addEventListener("click", async event => {
     const data = await callApi(`/api/users/${encodeURIComponent(uid)}`, "DELETE");
     showAlert(manageUsersSuccess, data.message || "User deleted successfully.");
     await fetchUsers(true);
+    await fetchAttendance(true);
     applyUserFilters();
   } catch (err) {
     showAlert(manageUsersError, err.message);
