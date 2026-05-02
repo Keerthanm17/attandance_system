@@ -23,7 +23,7 @@
 
     // ── REPLACE THIS BLOCK WITH YOUR FIREBASE CONFIG ──
     const firebaseConfig = {
-      apiKey: "AIzaSyDoqNGn9TxCBQPnw2ae0_141-TDGKxdSGg",
+      apiKey: "__FIREBASE_API_KEY__",
       authDomain: "internship-project-5a976.firebaseapp.com",
       projectId: "internship-project-5a976",
       storageBucket: "internship-project-5a976.firebasestorage.app",
@@ -47,14 +47,8 @@
     });
   </script>
   <script>
-    const isLocalStaticHost = ["127.0.0.1", "localhost"].includes(window.location.hostname)
-      && window.location.port
-      && window.location.port !== "5000";
-
     window.APP_CONFIG = {
-      apiBase: window.location.protocol === "file:" || isLocalStaticHost
-        ? "http://127.0.0.1:5000"
-        : window.location.origin,
+      apiBase: "https://attandance-system-0w9q.onrender.com",
     };
   </script>
   <script src="script.js" defer></script>
