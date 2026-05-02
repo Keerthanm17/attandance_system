@@ -135,6 +135,22 @@ def get_session_state(uid):
     return active_session, latest_session, records
 
 
+def close_active_attendance_sessions(uid, exit_time):
+    """Closes any open attendance sessions for a user and returns the count."""
+    closed_count = 0
+    query = db.collection("Attendance").where("uid", "==", uid)
+
+    for doc in query.stream():
+        record = doc.to_dict() or {}
+        if record.get("exit_time"):
+            continue
+
+        doc.reference.update({"exit_time": exit_time})
+        closed_count += 1
+
+    return closed_count
+
+
 def require_admin(req):
     """Verifies the caller and returns an error response unless they are admin."""
     uid = get_verified_uid(req)
@@ -549,6 +565,8 @@ def delete_user(target_uid):
         return jsonify({"error": "User profile not found."}), 404
 
     profile = profile_doc.to_dict() or {}
+    deleted_at = now_iso()
+    closed_sessions = close_active_attendance_sessions(target_uid, deleted_at)
 
     try:
         auth.delete_user(target_uid)
@@ -561,6 +579,7 @@ def delete_user(target_uid):
     return jsonify({
         "message": f"User '{profile.get('name') or profile.get('email') or target_uid}' deleted.",
         "uid": target_uid,
+        "closed_active_sessions": closed_sessions,
     }), 200
 
 
