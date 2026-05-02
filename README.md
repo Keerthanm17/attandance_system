@@ -51,24 +51,18 @@ The app supports two main journeys:
 
 ```mermaid
 flowchart LR
-    A["Browser UI<br/>HTML + CSS + JS"]
-    B["Firebase<br/>Web Auth"]
-    C["Flask API<br/>Python Backend"]
-    D["Firebase<br/>Admin SDK"]
-    E["Firestore<br/>Database"]
+    A[Browser UI<br/>index.html + script.js + style.css]
+    B[Firebase Web Auth]
+    C[Flask API<br/>app.py]
+    D[Firebase Admin SDK]
+    E[Firestore]
 
-    A -->|"1. Sign in"| B
-    B -->|"2. ID token"| A
-    A -->|"3. Bearer token + REST"| C
-    C -->|"4. Verify token"| D
-    C -->|"5. Manage users"| D
-    C -->|"6. Data operations"| E
-
-    style A fill:#ffffff,stroke:#1976d2,stroke-width:2px
-    style B fill:#ffffff,stroke:#f57c00,stroke-width:2px
-    style C fill:#ffffff,stroke:#2e7d32,stroke-width:2px
-    style D fill:#ffffff,stroke:#7b1fa2,stroke-width:2px
-    style E fill:#ffffff,stroke:#00695c,stroke-width:2px
+    A -->|Email/password sign-in| B
+    B -->|Firebase ID token| A
+    A -->|Bearer token + REST calls| C
+    C -->|Verify token| D
+    C -->|Create/update/delete auth users| D
+    C -->|Read/write data| E
 ```
 
 ## Full Workflow Diagram
