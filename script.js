@@ -575,8 +575,8 @@ async function fetchAttendance(isBackgroundRefresh = false) {
     const data = await callApi(`/api/attendance?date=${date}`);
     const attendanceRecords = data.records || [];
     const currentUserRecords = getRecordsForCurrentUsers(attendanceRecords);
-    lastRecords = attendanceRecords;
-    renderAttendanceTable(attendanceRecords);
+    lastRecords = currentUserRecords;
+    renderAttendanceTable(currentUserRecords);
     renderLoginActivity(currentUserRecords);
     updateStats(currentUserRecords, date);
     adminRefreshStatus.textContent = `Last updated at ${formatTime(data.generated_at || new Date().toISOString())}`;
