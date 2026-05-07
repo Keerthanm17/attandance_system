@@ -1,138 +1,23 @@
 /**
- * MVJ College Attendance System — script.js
+ * MVJ College Attendance System - React frontend
  *
- * Flow:
- *  1. Firebase Auth verifies email and password.
- *  2. The backend returns the user's profile and current attendance state.
- *  3. Attendance starts only when the user presses "Attendance Sign In".
- *  4. Attendance ends only when the user presses "Attendance Sign Out".
+ * Firebase Auth still verifies login credentials.
+ * Flask still owns attendance, users, and account-request APIs.
  */
+
+const { useCallback, useEffect, useMemo, useState } = React;
+const h = React.createElement;
 
 const API_BASE = (window.APP_CONFIG?.apiBase || "").replace(/\/$/, "");
 const ADMIN_REFRESH_MS = 10000;
-
-// ── DOM references ──────────────────────────────────────────────────────────
-const viewLogin = document.getElementById("view-login");
-const viewDashboard = document.getElementById("view-dashboard");
-
-const emailInput = document.getElementById("email");
-const passwordInput = document.getElementById("password");
-const btnLogin = document.getElementById("btn-login");
-const loginError = document.getElementById("login-error");
-const togglePw = document.getElementById("toggle-pw");
-const btnShowRequest = document.getElementById("btn-show-request");
-const accountRequestForm = document.getElementById("account-request-form");
-const requestName = document.getElementById("request-name");
-const requestEmail = document.getElementById("request-email");
-const requestPassword = document.getElementById("request-password");
-const requestRole = document.getElementById("request-role");
-const btnSubmitRequest = document.getElementById("btn-submit-request");
-const requestError = document.getElementById("request-error");
-const requestSuccess = document.getElementById("request-success");
-
-const userName = document.getElementById("user-name");
-const userRoleBadge = document.getElementById("user-role-badge");
-const entryTimeDisplay = document.getElementById("entry-time-display");
-const exitTimeDisplay = document.getElementById("exit-time-display");
-const dateDisplay = document.getElementById("date-display");
-const sessionDuration = document.getElementById("session-duration");
-const attendanceStatusDisplay = document.getElementById("attendance-status-display");
-const attendanceActionTitle = document.getElementById("attendance-action-title");
-const attendanceActionText = document.getElementById("attendance-action-text");
-const btnAttendanceAction = document.getElementById("btn-attendance-action");
-const attendanceActionError = document.getElementById("attendance-action-error");
-const attendanceActionSuccess = document.getElementById("attendance-action-success");
-
-const navUserName = document.getElementById("nav-user-name");
-const navRole = document.getElementById("nav-role");
-const navAvatar = document.getElementById("nav-avatar");
-const liveClock = document.getElementById("live-clock");
-
-const btnLogout = document.getElementById("btn-logout");
-const logoutSuccess = document.getElementById("logout-success");
-
-const adminSection = document.getElementById("admin-section");
-const nonAdminSection = document.getElementById("non-admin-section");
-const attendanceDate = document.getElementById("attendance-date");
-const btnFetchAtt = document.getElementById("btn-fetch-attendance");
-const btnExport = document.getElementById("btn-export");
-const attendanceTbody = document.getElementById("attendance-tbody");
-const attendanceError = document.getElementById("attendance-error");
-
-const statTotal = document.getElementById("stat-total");
-const statActive = document.getElementById("stat-active");
-const statLatestLogin = document.getElementById("stat-latest-login");
-const statCheckedout = document.getElementById("stat-checkedout");
-const statDate = document.getElementById("stat-date");
-const adminRefreshStatus = document.getElementById("admin-refresh-status");
-const loginActivityList = document.getElementById("login-activity-list");
-
-const newName = document.getElementById("new-name");
-const newEmail = document.getElementById("new-email");
-const newPassword = document.getElementById("new-password");
-const newRole = document.getElementById("new-role");
-const btnCreate = document.getElementById("btn-create-user");
-const createError = document.getElementById("create-user-error");
-const createOk = document.getElementById("create-user-success");
-const btnRefreshUsers = document.getElementById("btn-refresh-users");
-const manageUsersError = document.getElementById("manage-users-error");
-const manageUsersSuccess = document.getElementById("manage-users-success");
-const usersTbody = document.getElementById("users-tbody");
-const usersSearch = document.getElementById("users-search");
-const usersRoleFilter = document.getElementById("users-role-filter");
-const usersStatusFilter = document.getElementById("users-status-filter");
-const requestsBadge = document.getElementById("requests-badge");
-const btnRefreshRequests = document.getElementById("btn-refresh-requests");
-const requestsError = document.getElementById("requests-error");
-const requestsSuccess = document.getElementById("requests-success");
-const requestsTbody = document.getElementById("requests-tbody");
-
-// ── State ───────────────────────────────────────────────────────────────────
-let currentIdToken = null;
-let currentRole = null;
-let currentUserUid = null;
-let currentSessionRecord = null;
-let latestSessionRecord = null;
-let clockInterval = null;
-let durationInterval = null;
-let adminRefreshInterval = null;
-let lastRecords = [];
-let lastUsers = [];
-let lastRequests = [];
-let manualLogin = false;
-
-// ── Utility helpers ─────────────────────────────────────────────────────────
-function showAlert(el, msg) {
-  el.textContent = msg;
-  el.hidden = false;
-  el.style.display = "block";
-}
-
-function hideAlert(el) {
-  el.textContent = "";
-  el.hidden = true;
-  el.style.display = "none";
-}
-
-function setLoginLoading(loading) {
-  btnLogin.querySelector(".btn-label").hidden = loading;
-  btnLogin.querySelector(".btn-spinner").hidden = !loading;
-  btnLogin.disabled = loading;
-}
-
-function setAttendanceActionLoading(loading) {
-  btnAttendanceAction.disabled = loading;
-  btnAttendanceAction.textContent = loading
-    ? "Saving…"
-    : btnAttendanceAction.dataset.mode === "clock-out"
-      ? "Attendance Sign Out"
-      : "Attendance Sign In";
-}
-
-function formatTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
+const ROLE_OPTIONS = [
+  ["admin", "Admin"],
+  ["hod", "HOD"],
+  ["teaching", "Teaching Staff"],
+  ["lab_instructor", "Lab Instructor"],
+  ["student", "Student"],
+];
+const REQUEST_ROLE_OPTIONS = ROLE_OPTIONS.filter(([value]) => value !== "admin");
 
 function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
@@ -140,7 +25,7 @@ function normalizeRole(role) {
 
 function formatRoleLabel(role) {
   const normalizedRole = normalizeRole(role);
-  if (!normalizedRole) return "—";
+  if (!normalizedRole) return "-";
   return normalizedRole
     .split("_")
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
@@ -148,8 +33,17 @@ function formatRoleLabel(role) {
 }
 
 function formatAccountStatusLabel(status) {
-  const normalizedStatus = String(status || "").trim().toLowerCase();
-  return normalizedStatus === "disabled" ? "Disabled" : "Active";
+  return String(status || "").trim().toLowerCase() === "disabled" ? "Disabled" : "Active";
+}
+
+function todayLocal() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function formatTime(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function formatLongDate(date = new Date()) {
@@ -161,15 +55,20 @@ function formatLongDate(date = new Date()) {
   });
 }
 
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function formatRequestDate(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function calcDuration(entry, exit, includeSeconds = false) {
-  if (!entry || !exit) return "—";
+  if (!entry || !exit) return "-";
   const diff = Math.floor((new Date(exit) - new Date(entry)) / 1000);
-  if (diff < 0) return "—";
+  if (diff < 0) return "-";
 
   const h = Math.floor(diff / 3600);
   const m = Math.floor((diff % 3600) / 60);
@@ -195,22 +94,15 @@ function getLatestSessionByUser(records) {
   return [...latestByUser.values()];
 }
 
-function getRecordsForCurrentUsers(records) {
-  if (!lastUsers.length) return records;
-
-  const currentUserIds = new Set(lastUsers.map(user => user.uid).filter(Boolean));
-  return records.filter(record => currentUserIds.has(record.uid));
-}
-
-async function callApi(path, method = "GET", body = null) {
+async function callApi(path, method = "GET", body = null, token = null) {
   const opts = {
     method,
     headers: {
-      Authorization: `Bearer ${currentIdToken}`,
       "Content-Type": "application/json",
     },
   };
 
+  if (token) opts.headers.Authorization = `Bearer ${token}`;
   if (body) opts.body = JSON.stringify(body);
 
   const res = await fetch(`${API_BASE}${path}`, opts);
@@ -219,811 +111,951 @@ async function callApi(path, method = "GET", body = null) {
   return data;
 }
 
-async function callPublicApi(path, method = "GET", body = null) {
-  const opts = {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  };
-
-  if (body) opts.body = JSON.stringify(body);
-
-  const res = await fetch(`${API_BASE}${path}`, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Server error");
-  return data;
+function Alert({ type = "error", message }) {
+  if (!message) return null;
+  return h("div", { className: `alert alert-${type}`, role: type === "error" ? "alert" : "status" }, message);
 }
 
-// ── View switchers ───────────────────────────────────────────────────────────
-function stopDurationCounter() {
-  if (!durationInterval) return;
-  clearInterval(durationInterval);
-  durationInterval = null;
+function CollegeEmblem({ small = false }) {
+  return h("div", { className: `college-emblem${small ? " small" : ""}` },
+    h("svg", { viewBox: "0 0 60 60", fill: "none", xmlns: "http://www.w3.org/2000/svg" },
+      h("polygon", {
+        points: "30,4 56,18 56,42 30,56 4,42 4,18",
+        fill: "none",
+        stroke: "var(--accent)",
+        strokeWidth: "2.5",
+      }),
+      h("text", {
+        x: "30",
+        y: "36",
+        textAnchor: "middle",
+        fontSize: "18",
+        fontWeight: "700",
+        fontFamily: "Playfair Display, serif",
+        fill: "var(--accent)",
+      }, "M")
+    )
+  );
 }
 
-function stopAdminRefresh() {
-  if (!adminRefreshInterval) return;
-  clearInterval(adminRefreshInterval);
-  adminRefreshInterval = null;
+function StatusPill({ status, children }) {
+  return h("span", { className: `status-pill ${status}` }, children);
 }
 
-function resetSessionDisplay() {
-  currentSessionRecord = null;
-  latestSessionRecord = null;
-  dateDisplay.textContent = "—";
-  entryTimeDisplay.textContent = "—";
-  exitTimeDisplay.textContent = "—";
-  sessionDuration.textContent = "Not started";
-  attendanceStatusDisplay.textContent = "Awaiting sign in";
-  attendanceActionTitle.textContent = "Ready to record your work session";
-  attendanceActionText.textContent = "Authenticate first, then press sign in to start timing your attendance.";
-  btnAttendanceAction.dataset.mode = "clock-in";
-  btnAttendanceAction.textContent = "Attendance Sign In";
-  hideAlert(attendanceActionError);
-  hideAlert(attendanceActionSuccess);
-}
-
-function showLoginView() {
-  viewLogin.style.display = "flex";
-  viewDashboard.style.display = "none";
-  emailInput.value = "";
-  passwordInput.value = "";
-  logoutSuccess.style.display = "none";
-  hideAlert(loginError);
-  hideAlert(requestError);
-  hideAlert(requestSuccess);
-  accountRequestForm.hidden = true;
-  btnShowRequest.textContent = "Request employee account";
-  [requestName, requestEmail, requestPassword].forEach(el => { el.value = ""; });
-  requestRole.value = "teaching";
-  hideAlert(attendanceActionError);
-  hideAlert(attendanceActionSuccess);
-  currentIdToken = null;
-  currentRole = null;
-  currentUserUid = null;
-  if (clockInterval) clearInterval(clockInterval);
-  stopDurationCounter();
-  stopAdminRefresh();
-  resetSessionDisplay();
-}
-
-function showDashboardView(data) {
-  viewLogin.style.display = "none";
-  viewDashboard.style.display = "block";
-  logoutSuccess.style.display = "none";
-
-  userName.textContent = data.name || "—";
-  userRoleBadge.textContent = formatRoleLabel(data.role);
-  navUserName.textContent = data.name || "—";
-  navRole.textContent = formatRoleLabel(data.role);
-  navAvatar.textContent = (data.name || "?")[0].toUpperCase();
-  dateDisplay.textContent = formatLongDate();
-  currentUserUid = data.uid || null;
-
-  updateAttendanceState(data.active_session, data.latest_session);
-
-  if (normalizeRole(data.role) === "admin") {
-    adminSection.style.display = "block";
-    nonAdminSection.style.display = "none";
-    attendanceDate.value = todayLocal();
-    statDate.textContent = todayLocal();
-    startAdminRefresh();
-    fetchUsers(true).finally(() => fetchAttendance());
-    fetchRequests(true);
-  } else {
-    adminSection.style.display = "none";
-    nonAdminSection.style.display = "block";
-    stopAdminRefresh();
-  }
-
-  startClock();
-}
-
-function updateAttendanceState(activeSession, latestSession) {
-  stopDurationCounter();
-  currentSessionRecord = activeSession || null;
-  latestSessionRecord = latestSession || null;
-
-  if (currentSessionRecord) {
-    entryTimeDisplay.textContent = formatTime(currentSessionRecord.entry_time);
-    exitTimeDisplay.textContent = "Not signed out yet";
-    attendanceStatusDisplay.textContent = `Active since ${formatTime(currentSessionRecord.entry_time)}`;
-    attendanceActionTitle.textContent = "Attendance session is running";
-    attendanceActionText.textContent = "When you leave, press attendance sign-out to store the full duration for this session.";
-    btnAttendanceAction.dataset.mode = "clock-out";
-    btnAttendanceAction.textContent = "Attendance Sign Out";
-    startDurationCounter(currentSessionRecord.entry_time);
-    return;
-  }
-
-  btnAttendanceAction.dataset.mode = "clock-in";
-  btnAttendanceAction.textContent = "Attendance Sign In";
-
-  if (latestSessionRecord?.entry_time && latestSessionRecord?.exit_time) {
-    entryTimeDisplay.textContent = formatTime(latestSessionRecord.entry_time);
-    exitTimeDisplay.textContent = formatTime(latestSessionRecord.exit_time);
-    sessionDuration.textContent = calcDuration(
-      latestSessionRecord.entry_time,
-      latestSessionRecord.exit_time
-    );
-    attendanceStatusDisplay.textContent = `Signed out at ${formatTime(latestSessionRecord.exit_time)}`;
-    attendanceActionTitle.textContent = "Previous session has been stored";
-    attendanceActionText.textContent = "Press attendance sign-in when you are ready to start your next work session.";
-    return;
-  }
-
-  entryTimeDisplay.textContent = "—";
-  exitTimeDisplay.textContent = "—";
-  sessionDuration.textContent = "Not started";
-  attendanceStatusDisplay.textContent = "Awaiting sign in";
-  attendanceActionTitle.textContent = "Ready to record your work session";
-  attendanceActionText.textContent = "Press attendance sign-in to begin your timer for this visit.";
-}
-
-function startClock() {
-  if (clockInterval) clearInterval(clockInterval);
-  const tick = () => {
-    liveClock.textContent = new Date().toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  };
-  tick();
-  clockInterval = setInterval(tick, 1000);
-}
-
-function startDurationCounter(entryTime) {
-  const tick = () => {
-    sessionDuration.textContent = calcDuration(entryTime, new Date().toISOString(), true);
-  };
-  tick();
-  durationInterval = setInterval(tick, 1000);
-}
-
-function startAdminRefresh() {
-  stopAdminRefresh();
-  adminRefreshStatus.textContent = `Auto-refreshing every ${ADMIN_REFRESH_MS / 1000} seconds`;
-  adminRefreshInterval = setInterval(() => {
-    if (normalizeRole(currentRole) === "admin") {
-      fetchAttendance(true);
-      fetchRequests(true);
-    }
-  }, ADMIN_REFRESH_MS);
-}
-
-// ── Password visibility toggle ───────────────────────────────────────────────
-togglePw.addEventListener("click", () => {
-  const isText = passwordInput.type === "text";
-  passwordInput.type = isText ? "password" : "text";
-  togglePw.setAttribute("aria-label", isText ? "Show password" : "Hide password");
-});
-
-btnShowRequest.addEventListener("click", () => {
-  const willShow = accountRequestForm.hidden;
-  accountRequestForm.hidden = !willShow;
-  btnShowRequest.textContent = willShow ? "Hide request form" : "Request employee account";
-  hideAlert(requestError);
-  hideAlert(requestSuccess);
-  if (willShow) {
-    requestName.focus();
-  }
-});
-
-accountRequestForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  hideAlert(requestError);
-  hideAlert(requestSuccess);
-
-  const payload = {
-    name: requestName.value.trim(),
-    email: requestEmail.value.trim(),
-    password: requestPassword.value,
-    role: requestRole.value,
-  };
-
-  if (!payload.name || !payload.email || !payload.password || !payload.role) {
-    showAlert(requestError, "Please fill in all request fields.");
-    return;
-  }
-
-  if (payload.password.length < 6) {
-    showAlert(requestError, "Password must be at least 6 characters.");
-    return;
-  }
-
-  btnSubmitRequest.textContent = "Submitting…";
-  btnSubmitRequest.disabled = true;
-
-  try {
-    const data = await callPublicApi("/api/account_requests", "POST", payload);
-    showAlert(requestSuccess, data.message || "Account request submitted.");
-    [requestName, requestEmail, requestPassword].forEach(el => { el.value = ""; });
-    requestRole.value = "teaching";
-  } catch (err) {
-    showAlert(requestError, err.message);
-  } finally {
-    btnSubmitRequest.textContent = "Submit Request";
-    btnSubmitRequest.disabled = false;
-  }
-});
-
-// ── Authentication flow ─────────────────────────────────────────────────────
-btnLogin.addEventListener("click", async () => {
-  const email = emailInput.value.trim();
-  const password = passwordInput.value;
-  hideAlert(loginError);
-
-  if (!email || !password) {
-    showAlert(loginError, "Please enter your email and password.");
-    return;
-  }
-
-  setLoginLoading(true);
-  manualLogin = true;
-
-  try {
-    const auth = window._firebaseAuth;
-    const signIn = window._firebaseSignIn;
-    const userCred = await signIn(auth, email, password);
-
-    currentIdToken = await userCred.user.getIdToken();
-    const data = await callApi("/api/login", "POST");
-    currentRole = normalizeRole(data.role);
-    showDashboardView(data);
-  } catch (err) {
-    let msg = err.message || "Login failed. Please try again.";
-    if (err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
-      msg = "Invalid email or password.";
-    } else if (err.code === "auth/user-disabled") {
-      msg = "This account has been disabled. Please contact your administrator.";
-    } else if (err.code === "auth/too-many-requests") {
-      msg = "Too many attempts. Please wait a moment and try again.";
-    }
-    showAlert(loginError, msg);
-    currentIdToken = null;
-  } finally {
-    setLoginLoading(false);
-    manualLogin = false;
-  }
-});
-
-[emailInput, passwordInput].forEach(el => {
-  el.addEventListener("keydown", event => {
-    if (event.key === "Enter") btnLogin.click();
+function LoginView({ onLoginComplete }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [showRequest, setShowRequest] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    role: "teaching",
   });
-});
+  const [requestError, setRequestError] = useState("");
+  const [requestSuccess, setRequestSuccess] = useState("");
+  const [requestLoading, setRequestLoading] = useState(false);
 
-// ── Attendance actions ──────────────────────────────────────────────────────
-btnAttendanceAction.addEventListener("click", async () => {
-  hideAlert(attendanceActionError);
-  hideAlert(attendanceActionSuccess);
-  setAttendanceActionLoading(true);
+  async function handleLogin(event) {
+    event.preventDefault();
+    setLoginError("");
 
-  try {
-    if (btnAttendanceAction.dataset.mode === "clock-out") {
-      const data = await callApi("/api/clock_out", "POST");
-      updateAttendanceState(null, data.record);
-      const duration = calcDuration(data.record.entry_time, data.record.exit_time);
-      showAlert(
-        attendanceActionSuccess,
-        `Attendance sign-out stored successfully. In: ${formatTime(data.record.entry_time)} | Out: ${formatTime(data.record.exit_time)} | Active: ${duration}`
-      );
-    } else {
-      const data = await callApi("/api/clock_in", "POST");
-      updateAttendanceState(data.record, data.record);
-      showAlert(attendanceActionSuccess, "Attendance sign-in stored successfully.");
+    if (!email.trim() || !password) {
+      setLoginError("Please enter your email and password.");
+      return;
     }
 
-    if (normalizeRole(currentRole) === "admin") {
-      fetchAttendance(true);
+    setLoading(true);
+    try {
+      const userCred = await window._firebaseSignIn(window._firebaseAuth, email.trim(), password);
+      const token = await userCred.user.getIdToken();
+      const data = await callApi("/api/login", "POST", null, token);
+      onLoginComplete(token, data);
+    } catch (err) {
+      let msg = err.message || "Login failed. Please try again.";
+      if (err.code === "auth/wrong-password" || err.code === "auth/user-not-found" || err.code === "auth/invalid-credential") {
+        msg = "Invalid email or password.";
+      } else if (err.code === "auth/user-disabled") {
+        msg = "This account has been disabled. Please contact your administrator.";
+      } else if (err.code === "auth/too-many-requests") {
+        msg = "Too many attempts. Please wait a moment and try again.";
+      }
+      setLoginError(msg);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    showAlert(attendanceActionError, err.message);
-  } finally {
-    setAttendanceActionLoading(false);
   }
-});
 
-// ── Account logout ──────────────────────────────────────────────────────────
-btnLogout.addEventListener("click", async () => {
-  btnLogout.disabled = true;
-  btnLogout.textContent = "Logging out…";
+  async function submitRequest(event) {
+    event.preventDefault();
+    setRequestError("");
+    setRequestSuccess("");
 
-  try {
+    const payload = {
+      name: requestForm.name.trim(),
+      email: requestForm.email.trim(),
+      password: requestForm.password,
+      role: requestForm.role,
+    };
+
+    if (!payload.name || !payload.email || !payload.password || !payload.role) {
+      setRequestError("Please fill in all request fields.");
+      return;
+    }
+
+    if (payload.password.length < 6) {
+      setRequestError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setRequestLoading(true);
+    try {
+      const data = await callApi("/api/account_requests", "POST", payload);
+      setRequestSuccess(data.message || "Account request submitted.");
+      setRequestForm({ name: "", email: "", password: "", role: "teaching" });
+    } catch (err) {
+      setRequestError(err.message);
+    } finally {
+      setRequestLoading(false);
+    }
+  }
+
+  function updateRequestField(field, value) {
+    setRequestForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  return h("main", { className: "panel login-panel", "aria-live": "polite" },
+    h("div", { className: "login-card" },
+      h("div", { className: "college-brand" },
+        h(CollegeEmblem),
+        h("div", { className: "college-info" },
+          h("h1", { className: "college-name" }, "MVJ College of Engineering"),
+          h("p", { className: "system-label" }, "Attendance Management System")
+        )
+      ),
+      h("div", { className: "divider" }, h("span", null, "Sign In")),
+      h(Alert, { message: loginError }),
+      h("form", { onSubmit: handleLogin },
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "email" }, "Institutional Email"),
+          h("input", {
+            type: "email",
+            id: "email",
+            placeholder: "you@mvjce.edu.in",
+            autoComplete: "username",
+            value: email,
+            onChange: event => setEmail(event.target.value),
+            required: true,
+          })
+        ),
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "password" }, "Password"),
+          h("div", { className: "password-wrap" },
+            h("input", {
+              type: showPassword ? "text" : "password",
+              id: "password",
+              placeholder: "Password",
+              autoComplete: "current-password",
+              value: password,
+              onChange: event => setPassword(event.target.value),
+              required: true,
+            }),
+            h("button", {
+              type: "button",
+              id: "toggle-pw",
+              "aria-label": showPassword ? "Hide password" : "Show password",
+              onClick: () => setShowPassword(prev => !prev),
+            }, showPassword ? "Hide" : "Show")
+          )
+        ),
+        h("button", { className: "btn btn-primary", disabled: loading },
+          loading ? h("span", { className: "btn-spinner" }) : h("span", { className: "btn-label" }, "Authenticate & Continue")
+        )
+      ),
+      h("p", { className: "form-hint" }, "Authentication only. Attendance starts after you press the in-page sign-in button."),
+      h("div", { className: "request-toggle-row" },
+        h("button", {
+          type: "button",
+          className: "request-link",
+          onClick: () => {
+            setShowRequest(prev => !prev);
+            setRequestError("");
+            setRequestSuccess("");
+          },
+        }, showRequest ? "Hide request form" : "Request employee account")
+      ),
+      showRequest && h("form", { className: "account-request-form", onSubmit: submitRequest },
+        h("div", { className: "divider" }, h("span", null, "Request Account")),
+        h(Alert, { message: requestError }),
+        h(Alert, { type: "success", message: requestSuccess }),
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "request-name" }, "Full Name"),
+          h("input", {
+            type: "text",
+            id: "request-name",
+            placeholder: "Dr. Ravi Kumar",
+            autoComplete: "name",
+            value: requestForm.name,
+            onChange: event => updateRequestField("name", event.target.value),
+          })
+        ),
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "request-email" }, "Institutional Email"),
+          h("input", {
+            type: "email",
+            id: "request-email",
+            placeholder: "you@mvjce.edu.in",
+            autoComplete: "email",
+            value: requestForm.email,
+            onChange: event => updateRequestField("email", event.target.value),
+          })
+        ),
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "request-password" }, "Password"),
+          h("input", {
+            type: "password",
+            id: "request-password",
+            placeholder: "Min 6 characters",
+            autoComplete: "new-password",
+            value: requestForm.password,
+            onChange: event => updateRequestField("password", event.target.value),
+          })
+        ),
+        h("div", { className: "form-group" },
+          h("label", { htmlFor: "request-role" }, "Requested Role"),
+          h("select", {
+            id: "request-role",
+            value: requestForm.role,
+            onChange: event => updateRequestField("role", event.target.value),
+          }, REQUEST_ROLE_OPTIONS.map(([value, label]) => h("option", { key: value, value }, label)))
+        ),
+        h("button", {
+          type: "submit",
+          className: "btn btn-outline request-submit-btn",
+          disabled: requestLoading,
+        }, requestLoading ? "Submitting..." : "Submit Request")
+      )
+    )
+  );
+}
+
+function DashboardView({ token, profile, onLogout }) {
+  const role = normalizeRole(profile?.role);
+  const isAdmin = role === "admin";
+  const [activeSession, setActiveSession] = useState(profile?.active_session || null);
+  const [latestSession, setLatestSession] = useState(profile?.latest_session || null);
+  const [tick, setTick] = useState(Date.now());
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [attendanceSuccess, setAttendanceSuccess] = useState("");
+  const [records, setRecords] = useState([]);
+  const [attendanceDate, setAttendanceDate] = useState(todayLocal());
+  const [attendanceFetchError, setAttendanceFetchError] = useState("");
+  const [adminRefreshStatus, setAdminRefreshStatus] = useState("Waiting for records...");
+  const [activeTab, setActiveTab] = useState("attendance");
+  const [requests, setRequests] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  const fetchAttendance = useCallback(async (isBackgroundRefresh = false) => {
+    if (!isAdmin) return;
+    setAttendanceFetchError("");
+    try {
+      const data = await callApi(`/api/attendance?date=${attendanceDate}`, "GET", null, token);
+      setRecords(data.records || []);
+      setAdminRefreshStatus(`Last updated at ${formatTime(data.generated_at || new Date().toISOString())}`);
+    } catch (err) {
+      setRecords([]);
+      setAttendanceFetchError(err.message);
+      setAdminRefreshStatus("Unable to refresh records");
+    }
+  }, [attendanceDate, isAdmin, token]);
+
+  const fetchRequests = useCallback(async () => {
+    if (!isAdmin) return;
+    const data = await callApi("/api/account_requests?status=pending", "GET", null, token);
+    setRequests(data.requests || []);
+  }, [isAdmin, token]);
+
+  const fetchUsers = useCallback(async () => {
+    if (!isAdmin) return;
+    const data = await callApi("/api/users", "GET", null, token);
+    setUsers(data.users || []);
+  }, [isAdmin, token]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    fetchAttendance(true);
+    fetchRequests().catch(() => setRequests([]));
+    fetchUsers().catch(() => setUsers([]));
+
+    const timer = setInterval(() => {
+      fetchAttendance(true);
+      fetchRequests().catch(() => setRequests([]));
+    }, ADMIN_REFRESH_MS);
+
+    const refreshOnFocus = () => {
+      if (document.hidden) return;
+      fetchAttendance(true);
+      fetchRequests().catch(() => setRequests([]));
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnFocus);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnFocus);
+    };
+  }, [fetchAttendance, fetchRequests, fetchUsers, isAdmin]);
+
+  async function handleAttendanceAction() {
+    setAttendanceError("");
+    setAttendanceSuccess("");
+    setAttendanceLoading(true);
+
+    try {
+      if (activeSession) {
+        const data = await callApi("/api/clock_out", "POST", null, token);
+        setActiveSession(null);
+        setLatestSession(data.record);
+        const duration = calcDuration(data.record.entry_time, data.record.exit_time);
+        setAttendanceSuccess(`Attendance sign-out stored successfully. In: ${formatTime(data.record.entry_time)} | Out: ${formatTime(data.record.exit_time)} | Active: ${duration}`);
+      } else {
+        const data = await callApi("/api/clock_in", "POST", null, token);
+        setActiveSession(data.record);
+        setLatestSession(data.record);
+        setAttendanceSuccess("Attendance sign-in stored successfully.");
+      }
+
+      if (isAdmin) fetchAttendance(true);
+    } catch (err) {
+      setAttendanceError(err.message);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  }
+
+  async function logout() {
     await window._firebaseSignOut(window._firebaseAuth);
-  } finally {
-    btnLogout.disabled = false;
-    btnLogout.textContent = "Log Out Account";
-    showLoginView();
-  }
-});
-
-// ── Tab switching ────────────────────────────────────────────────────────────
-document.querySelectorAll(".tab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach(tab => tab.classList.remove("active"));
-    document.querySelectorAll(".tab-content").forEach(content => {
-      content.style.display = "none";
-      content.classList.remove("active");
-    });
-    btn.classList.add("active");
-    const target = document.getElementById(`tab-${btn.dataset.tab}`);
-    target.style.display = "block";
-    target.classList.add("active");
-
-    if (btn.dataset.tab === "manage" && normalizeRole(currentRole) === "admin") {
-      fetchUsers();
-    } else if (btn.dataset.tab === "requests" && normalizeRole(currentRole) === "admin") {
-      fetchRequests();
-    }
-  });
-});
-
-// ── Admin: Fetch Attendance Records ─────────────────────────────────────────
-async function fetchAttendance(isBackgroundRefresh = false) {
-  attendanceError.style.display = "none";
-  const date = attendanceDate.value || todayLocal();
-
-  if (!isBackgroundRefresh) {
-    btnFetchAtt.textContent = "Loading…";
-    btnFetchAtt.disabled = true;
+    onLogout();
   }
 
-  try {
-    const data = await callApi(`/api/attendance?date=${date}`);
-    const attendanceRecords = data.records || [];
-    const currentUserRecords = getRecordsForCurrentUsers(attendanceRecords);
-    lastRecords = currentUserRecords;
-    renderAttendanceTable(currentUserRecords);
-    renderLoginActivity(currentUserRecords);
-    updateStats(currentUserRecords, date);
-    adminRefreshStatus.textContent = `Last updated at ${formatTime(data.generated_at || new Date().toISOString())}`;
-  } catch (err) {
-    attendanceError.style.display = "block";
-    attendanceError.textContent = err.message;
-    renderAttendanceTable([]);
-    renderLoginActivity([]);
-    adminRefreshStatus.textContent = "Unable to refresh records";
-  } finally {
-    if (!isBackgroundRefresh) {
-      btnFetchAtt.textContent = "Fetch Records";
-      btnFetchAtt.disabled = false;
-    }
-  }
+  const latestRecord = activeSession || latestSession || {};
+  const actionMode = activeSession ? "clock-out" : "clock-in";
+  const durationText = activeSession
+    ? calcDuration(activeSession.entry_time, new Date(tick).toISOString(), true)
+    : latestSession?.entry_time && latestSession?.exit_time
+      ? calcDuration(latestSession.entry_time, latestSession.exit_time)
+      : "Not started";
+  const actionTitle = activeSession
+    ? "Attendance session is running"
+    : latestSession?.exit_time
+      ? "Previous session has been stored"
+      : "Ready to record your work session";
+  const actionText = activeSession
+    ? "When you leave, press attendance sign-out to store the full duration for this session."
+    : latestSession?.exit_time
+      ? "Press attendance sign-in when you are ready to start your next work session."
+      : "Press attendance sign-in to begin your timer for this visit.";
+  const attendanceStatus = activeSession
+    ? `Active since ${formatTime(activeSession.entry_time)}`
+    : latestSession?.exit_time
+      ? `Signed out at ${formatTime(latestSession.exit_time)}`
+      : "Awaiting sign in";
+
+  return h("main", { className: "panel dashboard-panel", "aria-live": "polite" },
+    h("header", { className: "dash-header" },
+      h("div", { className: "college-brand compact" },
+        h(CollegeEmblem, { small: true }),
+        h("div", null,
+          h("span", { className: "college-name-sm" }, "MVJ College of Engineering"),
+          h("span", { className: "nav-sub" }, "Attendance Management System")
+        )
+      ),
+      h("div", { className: "nav-right" },
+        h("div", { className: "live-clock" }, new Date(tick).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })),
+        h("div", { className: "nav-user" },
+          h("div", { className: "nav-avatar" }, (profile?.name || "?")[0].toUpperCase()),
+          h("div", { className: "nav-user-info" },
+            h("span", null, profile?.name || "-"),
+            h("span", { className: "nav-role" }, formatRoleLabel(role))
+          )
+        ),
+        h("button", { className: "btn btn-outline", onClick: logout }, "Log Out Account")
+      )
+    ),
+    h("section", { className: "welcome-banner" },
+      h("div", { className: "welcome-left" },
+        h("p", { className: "welcome-tag" }, "Good day,"),
+        h("h2", { className: "welcome-name" }, profile?.name || "-"),
+        h("div", { className: "role-badge" }, formatRoleLabel(role))
+      ),
+      h("div", { className: "welcome-right" },
+        h("div", { className: "session-card" },
+          h(SessionItem, { label: "Attendance In", value: latestRecord.entry_time ? formatTime(latestRecord.entry_time) : "-" }),
+          h(SessionItem, { label: "Working Time", value: durationText }),
+          h(SessionItem, { label: "Attendance Out", value: latestRecord.exit_time ? formatTime(latestRecord.exit_time) : activeSession ? "Not signed out yet" : "-" }),
+          h(SessionItem, { label: "Status", value: attendanceStatus })
+        )
+      )
+    ),
+    h("section", { className: "attendance-action-panel" },
+      h("div", { className: "attendance-action-copy" },
+        h("p", { className: "attendance-kicker" }, "Attendance Action"),
+        h("h3", null, actionTitle),
+        h("p", null, actionText),
+        h("div", { className: "attendance-action-meta" }, formatLongDate())
+      ),
+      h("div", { className: "attendance-action-controls" },
+        h("button", {
+          className: "btn btn-primary action-btn",
+          disabled: attendanceLoading,
+          onClick: handleAttendanceAction,
+        }, attendanceLoading ? "Saving..." : actionMode === "clock-out" ? "Attendance Sign Out" : "Attendance Sign In")
+      )
+    ),
+    h("div", { className: "dashboard-alerts" },
+      h(Alert, { message: attendanceError }),
+      h(Alert, { type: "success", message: attendanceSuccess })
+    ),
+    isAdmin
+      ? h(AdminSection, {
+          records,
+          attendanceDate,
+          setAttendanceDate,
+          fetchAttendance,
+          attendanceFetchError,
+          adminRefreshStatus,
+          activeTab,
+          setActiveTab,
+          requests,
+          setRequests,
+          fetchRequests,
+          users,
+          setUsers,
+          fetchUsers,
+          token,
+          currentUserUid: profile?.uid,
+        })
+      : h(NonAdminSection)
+  );
 }
 
-btnFetchAtt.addEventListener("click", () => fetchAttendance());
+function SessionItem({ label, value }) {
+  return h("div", { className: "session-item" },
+    h("span", null, `${label}: `, h("strong", null, value))
+  );
+}
 
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && normalizeRole(currentRole) === "admin") {
-    fetchAttendance(true);
-    fetchRequests(true);
-  }
-});
-
-window.addEventListener("focus", () => {
-  if (normalizeRole(currentRole) === "admin") {
-    fetchAttendance(true);
-    fetchRequests(true);
-  }
-});
-
-function updateStats(records, date) {
-  const latestSessions = getLatestSessionByUser(records);
+function AdminSection(props) {
+  const latestSessions = getLatestSessionByUser(props.records);
   const checkedOut = latestSessions.filter(record => record.exit_time).length;
   const active = latestSessions.filter(record => !record.exit_time).length;
-  const latestRecord = [...records]
-    .filter(r => r.entry_time)
+  const latestRecord = [...props.records]
+    .filter(record => record.entry_time)
     .sort((a, b) => new Date(b.entry_time) - new Date(a.entry_time))[0];
 
-  statTotal.textContent = latestSessions.length;
-  statActive.textContent = active;
-  statLatestLogin.textContent = latestRecord ? formatTime(latestRecord.entry_time) : "—";
-  statCheckedout.textContent = checkedOut;
-  statDate.textContent = date;
+  return h("section", { className: "admin-section" },
+    h("div", { className: "stats-grid" },
+      h(StatCard, { label: "Users Logged In Today", value: latestSessions.length, tone: "blue" }),
+      h(StatCard, { label: "Latest User Login", value: latestRecord ? formatTime(latestRecord.entry_time) : "-", tone: "teal" }),
+      h(StatCard, { label: "Still Active", value: active, tone: "orange" }),
+      h(StatCard, { label: "Checked Out", value: checkedOut, tone: "gold" })
+    ),
+    h("section", { className: "insight-panel" },
+      h("div", { className: "insight-head" },
+        h("div", null,
+          h("p", { className: "insight-kicker" }, "Admin Analytics"),
+          h("h3", null, "Realtime Analytics Dashboard"),
+          h("p", { className: "panel-desc" }, "Shows one live summary row per user, including admin accounts.")
+        ),
+        h("div", { className: "insight-meta" },
+          h("span", null, props.adminRefreshStatus),
+          h("span", { className: "date-chip" }, props.attendanceDate)
+        )
+      ),
+      h("div", { className: "activity-head" },
+        ["User", "Check In", "Check Out", "Total Active Hours", "Status"].map(label => h("span", { key: label }, label))
+      ),
+      h(LoginActivityList, { records: props.records })
+    ),
+    h("div", { className: "tabs" },
+      h(TabButton, { id: "attendance", label: "Attendance Records", activeTab: props.activeTab, setActiveTab: props.setActiveTab }),
+      h(TabButton, { id: "requests", label: "Requests", activeTab: props.activeTab, setActiveTab: props.setActiveTab, badge: props.requests.length }),
+      h(TabButton, { id: "create", label: "Create User", activeTab: props.activeTab, setActiveTab: props.setActiveTab }),
+      h(TabButton, { id: "manage", label: "Manage Users", activeTab: props.activeTab, setActiveTab: props.setActiveTab })
+    ),
+    props.activeTab === "attendance" && h(AttendanceTab, props),
+    props.activeTab === "requests" && h(RequestsTab, props),
+    props.activeTab === "create" && h(CreateUserTab, props),
+    props.activeTab === "manage" && h(ManageUsersTab, props)
+  );
 }
 
-function renderAttendanceTable(records) {
-  if (!records.length) {
-    attendanceTbody.innerHTML = `<tr class="empty-row"><td colspan="7">No attendance records found for this date.</td></tr>`;
-    return;
-  }
-
-  attendanceTbody.innerHTML = records.map((record, index) => {
-    const duration = record.entry_time && record.exit_time
-      ? calcDuration(record.entry_time, record.exit_time)
-      : "—";
-    const status = record.exit_time
-      ? `<span class="status-pill status-done">Checked Out</span>`
-      : `<span class="status-pill status-active">Active</span>`;
-
-    return `<tr>
-      <td>${index + 1}</td>
-      <td style="font-weight:600;color:var(--text-primary)">${escHtml(record.name || "—")}</td>
-      <td>${escHtml(formatRoleLabel(record.role))}</td>
-      <td>${record.entry_time ? formatTime(record.entry_time) : "—"}</td>
-      <td>${record.exit_time ? formatTime(record.exit_time) : `<span style="color:var(--text-muted)">Not yet</span>`}</td>
-      <td>${duration}</td>
-      <td>${status}</td>
-    </tr>`;
-  }).join("");
+function StatCard({ label, value, tone }) {
+  return h("div", { className: "stat-card" },
+    h("div", { className: `stat-icon ${tone}` }, h("span", null, "")),
+    h("div", { className: "stat-info" },
+      h("span", { className: "stat-value" }, value),
+      h("span", { className: "stat-label" }, label)
+    )
+  );
 }
 
-function renderLoginActivity(records) {
+function LoginActivityList({ records }) {
   if (!records.length) {
-    loginActivityList.innerHTML = `<div class="activity-empty">No attendance records found yet.</div>`;
-    return;
+    return h("div", { className: "activity-list" },
+      h("div", { className: "activity-empty" }, "No attendance records found yet.")
+    );
   }
 
   const uniqueUserRecords = getLatestSessionByUser(records)
     .sort((a, b) => new Date(b.entry_time || 0) - new Date(a.entry_time || 0));
 
-  loginActivityList.innerHTML = uniqueUserRecords.map(record => `
-    <article class="activity-row">
-      <div class="activity-main">
-        <div class="activity-name">${escHtml(record.name || "—")}</div>
-        <div class="activity-role">${escHtml(formatRoleLabel(record.role))}</div>
-      </div>
-      <div class="activity-time">${record.entry_time ? formatTime(record.entry_time) : "—"}</div>
-      <div class="activity-time">${record.exit_time ? formatTime(record.exit_time) : "—"}</div>
-      <div class="activity-duration">${
-        record.entry_time
-          ? calcDuration(record.entry_time, record.exit_time || new Date().toISOString())
-          : "—"
-      }</div>
-      <div class="activity-status">
-        ${record.exit_time
-          ? `<span class="status-pill status-done">Checked Out</span>`
-          : `<span class="status-pill status-active">Active</span>`}
-      </div>
-    </article>
-  `).join("");
+  return h("div", { className: "activity-list" },
+    uniqueUserRecords.map(record => h("article", { className: "activity-row", key: record.id || record.uid },
+      h("div", { className: "activity-main" },
+        h("div", { className: "activity-name" }, record.name || "-"),
+        h("div", { className: "activity-role" }, formatRoleLabel(record.role))
+      ),
+      h("div", { className: "activity-time" }, record.entry_time ? formatTime(record.entry_time) : "-"),
+      h("div", { className: "activity-time" }, record.exit_time ? formatTime(record.exit_time) : "-"),
+      h("div", { className: "activity-duration" }, record.entry_time ? calcDuration(record.entry_time, record.exit_time || new Date().toISOString()) : "-"),
+      h("div", { className: "activity-status" },
+        record.exit_time
+          ? h(StatusPill, { status: "status-done" }, "Checked Out")
+          : h(StatusPill, { status: "status-active" }, "Active")
+      )
+    ))
+  );
 }
 
-// ── Admin: Account Requests ─────────────────────────────────────────────────
-async function fetchRequests(isBackgroundRefresh = false) {
-  hideAlert(requestsError);
-
-  if (!isBackgroundRefresh) {
-    btnRefreshRequests.textContent = "Loading…";
-    btnRefreshRequests.disabled = true;
-
-    if (!lastRequests.length) {
-      requestsTbody.innerHTML = `<tr class="empty-row"><td colspan="6">Loading account requests...</td></tr>`;
-    }
-  }
-
-  try {
-    const data = await callApi("/api/account_requests?status=pending");
-    lastRequests = data.requests || [];
-    updateRequestsBadge(lastRequests.length);
-    renderRequestsTable(lastRequests);
-  } catch (err) {
-    lastRequests = [];
-    updateRequestsBadge(0);
-    showAlert(requestsError, err.message);
-    renderRequestsTable([]);
-  } finally {
-    if (!isBackgroundRefresh) {
-      btnRefreshRequests.textContent = "Refresh Requests";
-      btnRefreshRequests.disabled = false;
-    }
-  }
+function TabButton({ id, label, activeTab, setActiveTab, badge = 0 }) {
+  return h("button", {
+    className: `tab-btn${activeTab === id ? " active" : ""}`,
+    onClick: () => setActiveTab(id),
+  }, label, badge > 0 && h("span", { className: "tab-badge", "aria-label": `${badge} pending account requests` }, badge > 99 ? "99+" : badge));
 }
 
-function updateRequestsBadge(count) {
-  const pendingCount = Number(count) || 0;
-  requestsBadge.textContent = pendingCount > 99 ? "99+" : String(pendingCount);
-  requestsBadge.hidden = pendingCount === 0;
-  requestsBadge.setAttribute("aria-label", `${pendingCount} pending account requests`);
+function AttendanceTab({ records, attendanceDate, setAttendanceDate, fetchAttendance, attendanceFetchError }) {
+  return h("div", { className: "tab-content active" },
+    h("div", { className: "section-header" },
+      h("p", { className: "panel-desc" }, "Shows every attendance session for the selected date, including multiple entries for the same user."),
+      h("div", { className: "date-filter-row" },
+        h("input", {
+          type: "date",
+          value: attendanceDate,
+          onChange: event => setAttendanceDate(event.target.value),
+        }),
+        h("button", { className: "btn btn-sm", onClick: () => fetchAttendance(false) }, "Fetch Records"),
+        h("button", { className: "btn btn-sm btn-ghost", onClick: () => exportAttendance(records, attendanceDate) }, "Export CSV")
+      )
+    ),
+    h(Alert, { message: attendanceFetchError }),
+    h("div", { className: "table-wrap" },
+      h("table", null,
+        h("thead", null,
+          h("tr", null, ["#", "Name", "Role", "Entry Time", "Exit Time", "Duration", "Status"].map(label => h("th", { key: label }, label)))
+        ),
+        h("tbody", null,
+          records.length
+            ? records.map((record, index) => h("tr", { key: record.id || `${record.uid}-${index}` },
+                h("td", null, index + 1),
+                h("td", { style: { fontWeight: 600, color: "var(--text-primary)" } }, record.name || "-"),
+                h("td", null, formatRoleLabel(record.role)),
+                h("td", null, record.entry_time ? formatTime(record.entry_time) : "-"),
+                h("td", null, record.exit_time ? formatTime(record.exit_time) : h("span", { style: { color: "var(--text-muted)" } }, "Not yet")),
+                h("td", null, record.entry_time && record.exit_time ? calcDuration(record.entry_time, record.exit_time) : "-"),
+                h("td", null, record.exit_time
+                  ? h(StatusPill, { status: "status-done" }, "Checked Out")
+                  : h(StatusPill, { status: "status-active" }, "Active"))
+              ))
+            : h("tr", { className: "empty-row" }, h("td", { colSpan: 7 }, "No attendance records found for this date."))
+        )
+      )
+    )
+  );
 }
 
-function renderRequestsTable(requests) {
-  if (!requests.length) {
-    requestsTbody.innerHTML = `<tr class="empty-row"><td colspan="6">No pending account requests.</td></tr>`;
-    return;
-  }
-
-  requestsTbody.innerHTML = requests.map((item, index) => {
-    const requestedAt = item.requested_at
-      ? new Date(item.requested_at).toLocaleString([], {
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "—";
-
-    return `<tr>
-      <td>${index + 1}</td>
-      <td style="font-weight:600;color:var(--text-primary)">${escHtml(item.name || "—")}</td>
-      <td>${escHtml(item.email || "—")}</td>
-      <td>${escHtml(formatRoleLabel(item.role))}</td>
-      <td>${escHtml(requestedAt)}</td>
-      <td>
-        <button class="btn btn-sm request-accept-btn" data-action="accept-request" data-request-id="${escHtml(item.id || "")}">Accept</button>
-        <button class="btn btn-sm user-delete-btn" data-action="reject-request" data-request-id="${escHtml(item.id || "")}">Reject</button>
-      </td>
-    </tr>`;
-  }).join("");
-}
-
-btnRefreshRequests.addEventListener("click", () => fetchRequests());
-
-requestsTbody.addEventListener("click", async event => {
-  const actionBtn = event.target.closest("[data-action]");
-  if (!actionBtn) return;
-
-  hideAlert(requestsError);
-  hideAlert(requestsSuccess);
-
-  const requestId = actionBtn.dataset.requestId;
-  const accountRequest = lastRequests.find(item => item.id === requestId);
-  const name = accountRequest?.name || accountRequest?.email || "this request";
-  const isAccept = actionBtn.dataset.action === "accept-request";
-  const actionLabel = isAccept ? "Accept" : "Reject";
-  const confirmed = window.confirm(`${actionLabel} ${name}'s account request?`);
-  if (!confirmed) return;
-
-  actionBtn.disabled = true;
-  actionBtn.textContent = isAccept ? "Accepting…" : "Rejecting…";
-
-  try {
-    const path = `/api/account_requests/${encodeURIComponent(requestId)}/${isAccept ? "accept" : "reject"}`;
-    const data = await callApi(path, "POST");
-    showAlert(requestsSuccess, data.message || `Request ${isAccept ? "accepted" : "rejected"} successfully.`);
-    await fetchRequests(true);
-    if (isAccept) fetchUsers(true);
-  } catch (err) {
-    showAlert(requestsError, err.message);
-    if (actionBtn.isConnected) {
-      actionBtn.disabled = false;
-      actionBtn.textContent = actionLabel;
-    }
-  }
-});
-
-// ── Admin: Manage Users ─────────────────────────────────────────────────────
-async function fetchUsers(isBackgroundRefresh = false) {
-  hideAlert(manageUsersError);
-
-  if (!isBackgroundRefresh) {
-    btnRefreshUsers.textContent = "Loading…";
-    btnRefreshUsers.disabled = true;
-
-    if (!lastUsers.length) {
-      usersTbody.innerHTML = `<tr class="empty-row"><td colspan="6">Loading user accounts...</td></tr>`;
-    }
-  }
-
-  try {
-    const data = await callApi("/api/users");
-    lastUsers = data.users || [];
-    applyUserFilters();
-  } catch (err) {
-    lastUsers = [];
-    showAlert(manageUsersError, err.message);
-    renderUsersTable([]);
-  } finally {
-    if (!isBackgroundRefresh) {
-      btnRefreshUsers.textContent = "Refresh Users";
-      btnRefreshUsers.disabled = false;
-    }
-  }
-}
-
-function renderUsersTable(users) {
-  if (!users.length) {
-    usersTbody.innerHTML = `<tr class="empty-row"><td colspan="6">No user accounts found.</td></tr>`;
-    return;
-  }
-
-  usersTbody.innerHTML = users.map((user, index) => {
-    const isCurrentUser = user.uid === currentUserUid;
-    const isDisabled = String(user.account_status || "").toLowerCase() === "disabled";
-
-    return `<tr>
-      <td>${index + 1}</td>
-      <td style="font-weight:600;color:var(--text-primary)">${escHtml(user.name || "—")}</td>
-      <td>${escHtml(user.email || "—")}</td>
-      <td>${escHtml(formatRoleLabel(user.role))}</td>
-      <td>
-        <span class="status-pill ${isDisabled ? "status-disabled" : "status-active"}">
-          ${escHtml(formatAccountStatusLabel(user.account_status))}
-        </span>
-      </td>
-      <td>
-        ${isCurrentUser
-          ? `<button class="btn btn-sm" disabled>Current Account</button>`
-          : `<button class="btn btn-sm user-toggle-btn" data-action="toggle-status" data-uid="${escHtml(user.uid || "")}">
-              ${isDisabled ? "Enable" : "Disable"}
-            </button>
-            <button class="btn btn-sm user-delete-btn" data-action="delete-user" data-uid="${escHtml(user.uid || "")}">Delete</button>`}
-      </td>
-    </tr>`;
-  }).join("");
-}
-
-function applyUserFilters() {
-  const searchTerm = usersSearch.value.trim().toLowerCase();
-  const selectedRole = normalizeRole(usersRoleFilter.value);
-  const selectedStatus = String(usersStatusFilter.value || "").trim().toLowerCase();
-
-  const filteredUsers = lastUsers.filter(user => {
-    const name = String(user.name || "").toLowerCase();
-    const email = String(user.email || "").toLowerCase();
-    const roleMatches = !selectedRole || normalizeRole(user.role) === selectedRole;
-    const statusMatches = !selectedStatus || String(user.account_status || "active").toLowerCase() === selectedStatus;
-    const searchMatches = !searchTerm || name.includes(searchTerm) || email.includes(searchTerm);
-    return roleMatches && statusMatches && searchMatches;
-  });
-
-  renderUsersTable(filteredUsers);
-}
-
-btnRefreshUsers.addEventListener("click", () => fetchUsers());
-
-[usersSearch, usersRoleFilter, usersStatusFilter].forEach(control => {
-  control.addEventListener("input", applyUserFilters);
-  control.addEventListener("change", applyUserFilters);
-});
-
-usersTbody.addEventListener("click", async event => {
-  const actionBtn = event.target.closest("[data-action]");
-  if (!actionBtn) return;
-
-  hideAlert(manageUsersError);
-  hideAlert(manageUsersSuccess);
-
-  const uid = actionBtn.dataset.uid;
-  const user = lastUsers.find(item => item.uid === uid);
-  const name = user?.name || user?.email || "this user";
-
-  if (actionBtn.dataset.action === "toggle-status") {
-    const nextStatus = String(user?.account_status || "").toLowerCase() === "disabled" ? "active" : "disabled";
-    const confirmed = window.confirm(`${nextStatus === "disabled" ? "Disable" : "Enable"} ${name}'s account?`);
-    if (!confirmed) return;
-
-    const originalText = actionBtn.textContent;
-    actionBtn.disabled = true;
-    actionBtn.textContent = nextStatus === "disabled" ? "Disabling…" : "Enabling…";
-
-    try {
-      const data = await callApi(`/api/users/${encodeURIComponent(uid)}`, "PATCH", {
-        account_status: nextStatus,
-      });
-      showAlert(manageUsersSuccess, data.message || "User updated successfully.");
-      await fetchUsers(true);
-      if (usersStatusFilter.value && usersStatusFilter.value !== nextStatus) {
-        usersStatusFilter.value = "";
-      }
-      applyUserFilters();
-    } catch (err) {
-      showAlert(manageUsersError, err.message);
-      if (actionBtn.isConnected) {
-        actionBtn.disabled = false;
-        actionBtn.textContent = originalText;
-      }
-    }
-    return;
-  }
-
-  const confirmed = window.confirm(`Delete ${name}'s account permanently?`);
-  if (!confirmed) return;
-
-  const originalText = actionBtn.textContent;
-  actionBtn.disabled = true;
-  actionBtn.textContent = "Deleting…";
-
-  try {
-    const data = await callApi(`/api/users/${encodeURIComponent(uid)}`, "DELETE");
-    showAlert(manageUsersSuccess, data.message || "User deleted successfully.");
-    await fetchUsers(true);
-    await fetchAttendance(true);
-    applyUserFilters();
-  } catch (err) {
-    showAlert(manageUsersError, err.message);
-    if (actionBtn.isConnected) {
-      actionBtn.disabled = false;
-      actionBtn.textContent = originalText;
-    }
-  }
-});
-
-// ── CSV Export ───────────────────────────────────────────────────────────────
-btnExport.addEventListener("click", () => {
-  if (!lastRecords.length) {
+function exportAttendance(records, attendanceDate) {
+  if (!records.length) {
     alert("No records to export. Fetch records first.");
     return;
   }
 
   const rows = [["Name", "Role", "Entry Time", "Exit Time", "Duration", "Status"]];
-  lastRecords.forEach(record => {
-    const duration = record.entry_time && record.exit_time
-      ? calcDuration(record.entry_time, record.exit_time)
-      : "";
-    const status = record.exit_time ? "Checked Out" : "Active";
+  records.forEach(record => {
     rows.push([
       record.name,
       formatRoleLabel(record.role),
       record.entry_time,
       record.exit_time || "",
-      duration,
-      status,
+      record.entry_time && record.exit_time ? calcDuration(record.entry_time, record.exit_time) : "",
+      record.exit_time ? "Checked Out" : "Active",
     ]);
   });
 
-  const csv = rows.map(row => row.map(value => `"${value}"`).join(",")).join("\n");
+  const csv = rows.map(row => row.map(value => `"${String(value || "").replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `attendance_${attendanceDate.value || todayLocal()}.csv`;
+  a.download = `attendance_${attendanceDate || todayLocal()}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-});
-
-// ── Admin: Create User ───────────────────────────────────────────────────────
-btnCreate.addEventListener("click", async () => {
-  hideAlert(createError);
-  hideAlert(createOk);
-
-  const payload = {
-    name: newName.value.trim(),
-    email: newEmail.value.trim(),
-    password: newPassword.value,
-    role: newRole.value,
-  };
-
-  if (!payload.name || !payload.email || !payload.password || !payload.role) {
-    showAlert(createError, "Please fill in all fields and select a role.");
-    return;
-  }
-
-  btnCreate.textContent = "Creating…";
-  btnCreate.disabled = true;
-
-  try {
-    const data = await callApi("/api/create_user", "POST", payload);
-    showAlert(createOk, `✓ ${data.message}  (UID: ${data.uid})`);
-    [newName, newEmail, newPassword].forEach(el => { el.value = ""; });
-    newRole.value = "";
-    fetchUsers(true);
-  } catch (err) {
-    showAlert(createError, err.message);
-  } finally {
-    btnCreate.textContent = "Create User Account";
-    btnCreate.disabled = false;
-  }
-});
-
-// ── XSS Helper ───────────────────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
-// ── App initialisation ──────────────────────────────────────────────────────
-window.initApp = function () {
-  window._firebaseOnAuth(window._firebaseAuth, async user => {
-    if (manualLogin) return;
+function RequestsTab({ requests, setRequests, fetchRequests, fetchUsers, token }) {
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loadingId, setLoadingId] = useState("");
 
-    if (user) {
-      try {
-        currentIdToken = await user.getIdToken(true);
-        const data = await callApi("/api/login", "POST");
-        currentRole = normalizeRole(data.role);
-        showDashboardView(data);
-      } catch {
-        showLoginView();
-      }
-    } else {
-      showLoginView();
+  async function reviewRequest(item, action) {
+    setError("");
+    setSuccess("");
+    const label = action === "accept" ? "Accept" : "Reject";
+    if (!window.confirm(`${label} ${(item.name || item.email || "this request")}'s account request?`)) return;
+
+    setLoadingId(`${item.id}-${action}`);
+    try {
+      const data = await callApi(`/api/account_requests/${encodeURIComponent(item.id)}/${action}`, "POST", null, token);
+      setSuccess(data.message || `Request ${action}ed successfully.`);
+      const next = requests.filter(requestItem => requestItem.id !== item.id);
+      setRequests(next);
+      await fetchRequests();
+      if (action === "accept") fetchUsers().catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingId("");
     }
-  });
-};
+  }
+
+  return h("div", { className: "tab-content active" },
+    h("div", { className: "requests-panel" },
+      h("div", { className: "section-header manage-users-head" },
+        h("div", null, h("p", { className: "panel-desc" }, "Review new account requests. Accepted users can log in immediately with the password they chose.")),
+        h("button", { className: "btn btn-sm btn-ghost", onClick: () => fetchRequests().catch(err => setError(err.message)) }, "Refresh Requests")
+      ),
+      h(Alert, { message: error }),
+      h(Alert, { type: "success", message: success }),
+      h("div", { className: "table-wrap" },
+        h("table", { className: "users-table" },
+          h("thead", null,
+            h("tr", null, ["#", "Name", "Email", "Role", "Requested", "Action"].map(label => h("th", { key: label }, label)))
+          ),
+          h("tbody", null,
+            requests.length
+              ? requests.map((item, index) => h("tr", { key: item.id || item.uid },
+                  h("td", null, index + 1),
+                  h("td", { style: { fontWeight: 600, color: "var(--text-primary)" } }, item.name || "-"),
+                  h("td", null, item.email || "-"),
+                  h("td", null, formatRoleLabel(item.role)),
+                  h("td", null, formatRequestDate(item.requested_at)),
+                  h("td", null,
+                    h("button", {
+                      className: "btn btn-sm request-accept-btn",
+                      disabled: loadingId === `${item.id}-accept`,
+                      onClick: () => reviewRequest(item, "accept"),
+                    }, loadingId === `${item.id}-accept` ? "Accepting..." : "Accept"),
+                    h("button", {
+                      className: "btn btn-sm user-delete-btn",
+                      disabled: loadingId === `${item.id}-reject`,
+                      onClick: () => reviewRequest(item, "reject"),
+                    }, loadingId === `${item.id}-reject` ? "Rejecting..." : "Reject")
+                  )
+                ))
+              : h("tr", { className: "empty-row" }, h("td", { colSpan: 6 }, "No pending account requests."))
+          )
+        )
+      )
+    )
+  );
+}
+
+function CreateUserTab({ fetchUsers, token }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "" });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function updateField(field, value) {
+    setForm(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function createUser() {
+    setError("");
+    setSuccess("");
+    const payload = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      password: form.password,
+      role: form.role,
+    };
+
+    if (!payload.name || !payload.email || !payload.password || !payload.role) {
+      setError("Please fill in all fields and select a role.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await callApi("/api/create_user", "POST", payload, token);
+      setSuccess(`${data.message} (UID: ${data.uid})`);
+      setForm({ name: "", email: "", password: "", role: "" });
+      fetchUsers().catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return h("div", { className: "tab-content active" },
+    h("div", { className: "create-user-panel" },
+      h("p", { className: "panel-desc" }, "Add a new staff member or student to the system. They can log in immediately after creation."),
+      h(Alert, { message: error }),
+      h(Alert, { type: "success", message: success }),
+      h("div", { className: "create-user-grid" },
+        h(FormInput, { label: "Full Name", type: "text", value: form.name, placeholder: "Dr. Ravi Kumar", onChange: value => updateField("name", value) }),
+        h(FormInput, { label: "Institutional Email", type: "email", value: form.email, placeholder: "ravi@mvjce.edu.in", onChange: value => updateField("email", value) }),
+        h(FormInput, { label: "Temporary Password", type: "password", value: form.password, placeholder: "Min 6 characters", onChange: value => updateField("password", value) }),
+        h("div", { className: "form-group" },
+          h("label", null, "Role"),
+          h("select", { value: form.role, onChange: event => updateField("role", event.target.value) },
+            h("option", { value: "" }, "- Select Role -"),
+            ROLE_OPTIONS.map(([value, label]) => h("option", { key: value, value }, label))
+          )
+        )
+      ),
+      h("button", { className: "btn btn-primary create-user-btn", disabled: loading, onClick: createUser }, loading ? "Creating..." : "Create User Account")
+    )
+  );
+}
+
+function FormInput({ label, type, value, placeholder, onChange }) {
+  return h("div", { className: "form-group" },
+    h("label", null, label),
+    h("input", {
+      type,
+      value,
+      placeholder,
+      onChange: event => onChange(event.target.value),
+    })
+  );
+}
+
+function ManageUsersTab({ users, setUsers, fetchUsers, token, currentUserUid }) {
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loadingUid, setLoadingUid] = useState("");
+
+  const filteredUsers = useMemo(() => {
+    const searchTerm = search.trim().toLowerCase();
+    return users.filter(user => {
+      const name = String(user.name || "").toLowerCase();
+      const email = String(user.email || "").toLowerCase();
+      const roleMatches = !roleFilter || normalizeRole(user.role) === roleFilter;
+      const statusMatches = !statusFilter || String(user.account_status || "active").toLowerCase() === statusFilter;
+      const searchMatches = !searchTerm || name.includes(searchTerm) || email.includes(searchTerm);
+      return roleMatches && statusMatches && searchMatches;
+    });
+  }, [roleFilter, search, statusFilter, users]);
+
+  async function toggleStatus(user) {
+    setError("");
+    setSuccess("");
+    const isDisabled = String(user.account_status || "").toLowerCase() === "disabled";
+    const nextStatus = isDisabled ? "active" : "disabled";
+    const name = user.name || user.email || "this user";
+    if (!window.confirm(`${nextStatus === "disabled" ? "Disable" : "Enable"} ${name}'s account?`)) return;
+
+    setLoadingUid(user.uid);
+    try {
+      const data = await callApi(`/api/users/${encodeURIComponent(user.uid)}`, "PATCH", {
+        account_status: nextStatus,
+      }, token);
+      setSuccess(data.message || "User updated successfully.");
+      setUsers(prev => prev.map(item => item.uid === user.uid ? { ...item, account_status: nextStatus } : item));
+      fetchUsers().catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingUid("");
+    }
+  }
+
+  async function deleteUser(user) {
+    setError("");
+    setSuccess("");
+    const name = user.name || user.email || "this user";
+    if (!window.confirm(`Delete ${name}'s account permanently?`)) return;
+
+    setLoadingUid(user.uid);
+    try {
+      const data = await callApi(`/api/users/${encodeURIComponent(user.uid)}`, "DELETE", null, token);
+      setSuccess(data.message || "User deleted successfully.");
+      setUsers(prev => prev.filter(item => item.uid !== user.uid));
+      fetchUsers().catch(() => {});
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingUid("");
+    }
+  }
+
+  return h("div", { className: "tab-content active" },
+    h("div", { className: "manage-users-panel" },
+      h("div", { className: "section-header manage-users-head" },
+        h("div", null, h("p", { className: "panel-desc" }, "Review all existing user accounts and remove users that should no longer access the system.")),
+        h("button", { className: "btn btn-sm btn-ghost", onClick: () => fetchUsers().catch(err => setError(err.message)) }, "Refresh Users")
+      ),
+      h("div", { className: "manage-users-toolbar" },
+        h("input", { type: "search", placeholder: "Search by name or email", value: search, onChange: event => setSearch(event.target.value) }),
+        h("select", { value: roleFilter, onChange: event => setRoleFilter(event.target.value) },
+          h("option", { value: "" }, "All Roles"),
+          ROLE_OPTIONS.map(([value, label]) => h("option", { key: value, value }, label))
+        ),
+        h("select", { value: statusFilter, onChange: event => setStatusFilter(event.target.value) },
+          h("option", { value: "" }, "All Statuses"),
+          h("option", { value: "active" }, "Active"),
+          h("option", { value: "disabled" }, "Disabled")
+        )
+      ),
+      h(Alert, { message: error }),
+      h(Alert, { type: "success", message: success }),
+      h("div", { className: "table-wrap" },
+        h("table", { className: "users-table" },
+          h("thead", null,
+            h("tr", null, ["#", "Name", "Email", "Role", "Status", "Action"].map(label => h("th", { key: label }, label)))
+          ),
+          h("tbody", null,
+            filteredUsers.length
+              ? filteredUsers.map((user, index) => {
+                  const isCurrentUser = user.uid === currentUserUid;
+                  const isDisabled = String(user.account_status || "").toLowerCase() === "disabled";
+                  return h("tr", { key: user.uid || index },
+                    h("td", null, index + 1),
+                    h("td", { style: { fontWeight: 600, color: "var(--text-primary)" } }, user.name || "-"),
+                    h("td", null, user.email || "-"),
+                    h("td", null, formatRoleLabel(user.role)),
+                    h("td", null,
+                      h(StatusPill, { status: isDisabled ? "status-disabled" : "status-active" }, formatAccountStatusLabel(user.account_status))
+                    ),
+                    h("td", null,
+                      isCurrentUser
+                        ? h("button", { className: "btn btn-sm", disabled: true }, "Current Account")
+                        : [
+                            h("button", {
+                              key: "toggle",
+                              className: "btn btn-sm user-toggle-btn",
+                              disabled: loadingUid === user.uid,
+                              onClick: () => toggleStatus(user),
+                            }, isDisabled ? "Enable" : "Disable"),
+                            h("button", {
+                              key: "delete",
+                              className: "btn btn-sm user-delete-btn",
+                              disabled: loadingUid === user.uid,
+                              onClick: () => deleteUser(user),
+                            }, "Delete"),
+                          ]
+                    )
+                  );
+                })
+              : h("tr", { className: "empty-row" }, h("td", { colSpan: 6 }, "No user accounts found."))
+          )
+        )
+      )
+    )
+  );
+}
+
+function NonAdminSection() {
+  return h("section", { className: "non-admin-msg" },
+    h("div", { className: "na-card" },
+      h("div", { className: "na-icon" }, "A"),
+      h("h3", null, "Attendance control is ready"),
+      h("p", null, "Use the attendance sign-in button to start your work timer. When you leave later, log in again and press attendance sign-out to store the full duration."),
+      h("div", { className: "na-tip" }, "Contact your administrator if you need attendance reports.")
+    )
+  );
+}
+
+function App() {
+  const [firebaseReady, setFirebaseReady] = useState(Boolean(window._firebaseAuth));
+  const [token, setToken] = useState(null);
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    function markReady() {
+      setFirebaseReady(true);
+    }
+
+    if (window._firebaseAuth) markReady();
+    window.addEventListener("firebase-ready", markReady);
+    return () => window.removeEventListener("firebase-ready", markReady);
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseReady || !window._firebaseOnAuth) return undefined;
+
+    return window._firebaseOnAuth(window._firebaseAuth, async user => {
+      if (!user) {
+        setToken(null);
+        setProfile(null);
+        return;
+      }
+
+      try {
+        const idToken = await user.getIdToken(true);
+        const data = await callApi("/api/login", "POST", null, idToken);
+        setToken(idToken);
+        setProfile(data);
+      } catch {
+        setToken(null);
+        setProfile(null);
+      }
+    });
+  }, [firebaseReady]);
+
+  function handleLoginComplete(nextToken, data) {
+    setToken(nextToken);
+    setProfile(data);
+  }
+
+  function handleLogout() {
+    setToken(null);
+    setProfile(null);
+  }
+
+  if (!firebaseReady) {
+    return h("main", { className: "panel login-panel" },
+      h("div", { className: "login-card" },
+        h("div", { className: "divider" }, h("span", null, "Loading")),
+        h("p", { className: "form-hint" }, "Preparing authentication...")
+      )
+    );
+  }
+
+  return token && profile
+    ? h(DashboardView, { token, profile, onLogout: handleLogout })
+    : h(LoginView, { onLoginComplete: handleLoginComplete });
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(h(App));

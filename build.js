@@ -30,17 +30,17 @@ function copyFile(fileName) {
 
 loadDotEnv();
 
-const firebaseApiKey = process.env.FIREBASE_API_KEY;
-if (!firebaseApiKey) {
-  throw new Error("Missing FIREBASE_API_KEY. Add it to .env locally or Netlify environment variables.");
-}
-
 fs.rmSync(distDir, { recursive: true, force: true });
 fs.mkdirSync(distDir, { recursive: true });
 
-const indexHtml = fs
-  .readFileSync(path.join(rootDir, "index.html"), "utf8")
-  .replace("__FIREBASE_API_KEY__", firebaseApiKey);
+let indexHtml = fs.readFileSync(path.join(rootDir, "index.html"), "utf8");
+if (indexHtml.includes("__FIREBASE_API_KEY__")) {
+  const firebaseApiKey = process.env.FIREBASE_API_KEY;
+  if (!firebaseApiKey) {
+    throw new Error("Missing FIREBASE_API_KEY. Add it to .env locally or Netlify environment variables.");
+  }
+  indexHtml = indexHtml.replace("__FIREBASE_API_KEY__", firebaseApiKey);
+}
 
 fs.writeFileSync(path.join(distDir, "index.html"), indexHtml);
 copyFile("script.js");

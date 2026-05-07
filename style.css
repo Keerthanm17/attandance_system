@@ -225,6 +225,10 @@ input::placeholder { color: var(--text-muted); }
 .dashboard-panel { padding: 0 0 4rem; display: block; }
 .login-panel { display: flex; }
 [hidden] { display: none !important; }
+.dashboard-alerts {
+  max-width: 1100px;
+  margin: 1rem 2rem 0;
+}
 
 .dash-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -571,6 +575,10 @@ tbody tr:hover td { background: var(--surface-2); color: var(--text-primary); }
 }
 .panel-desc { font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6; }
 .create-user-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
+.create-user-btn {
+  width: auto;
+  padding: 0.7rem 2rem;
+}
 .manage-users-panel,
 .requests-panel {
   background: var(--surface); border: 1px solid var(--border);
@@ -636,6 +644,7 @@ tbody tr:hover td { background: var(--surface-2); color: var(--text-primary); }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .welcome-banner { margin-left: 1rem; margin-right: 1rem; }
   .attendance-action-panel { margin-left: 1rem; margin-right: 1rem; flex-direction: column; align-items: flex-start; }
+  .dashboard-alerts { margin-left: 1rem; margin-right: 1rem; }
   .admin-section { margin-left: 1rem; margin-right: 1rem; }
   .dash-header { padding: 0.85rem 1rem; }
   .live-clock { display: none; }

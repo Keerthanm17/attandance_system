@@ -4,7 +4,7 @@ Attendance and account-management platform for MVJ College of Engineering.
 
 This project combines:
 
-- a static frontend built with HTML, CSS, and vanilla JavaScript
+- a static React frontend loaded from `index.html`
 - Firebase Authentication on the client for email/password login
 - a Flask backend for business rules and admin operations
 - Firestore for user profiles, attendance records, and account requests
@@ -38,7 +38,7 @@ The app supports two main journeys:
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Frontend UI | HTML + CSS + vanilla JavaScript | Login screen, attendance dashboard, admin dashboard |
+| Frontend UI | React 18 + HTML + CSS | Login screen, attendance dashboard, admin dashboard |
 | Client auth | Firebase Web SDK | Sign in, sign out, auth state changes, ID token generation |
 | Backend API | Flask + Flask-CORS | REST API, authorization, attendance rules, admin actions |
 | Admin/auth bridge | Firebase Admin SDK | Verify ID tokens, create/disable/delete Firebase users |
@@ -51,7 +51,7 @@ The app supports two main journeys:
 
 ```mermaid
 flowchart LR
-    A[Browser UI<br/>index.html + script.js + style.css]
+    A[React Browser UI<br/>index.html + script.js + style.css]
     B[Firebase Web Auth]
     C[Flask API<br/>app.py]
     D[Firebase Admin SDK]
@@ -141,8 +141,8 @@ flowchart TD
 ```text
 project/
 ├── app.py                    # Flask backend and all API routes
-├── index.html                # Main UI shell, Firebase client config, dashboard markup
-├── script.js                 # Frontend behavior, auth flow, API calls, admin interactions
+├── index.html                # React/Firebase shell and client configuration
+├── script.js                 # React components, auth flow, API calls, admin interactions
 ├── style.css                 # Styling and responsive layout
 ├── requirements.txt          # Python dependencies
 ├── Procfile                  # Production backend start command
@@ -174,19 +174,19 @@ Backend entrypoint and API layer.
 
 Static application shell.
 
-- loads fonts, CSS, and Firebase Web SDK modules
+- loads fonts, CSS, React, ReactDOM, and Firebase Web SDK modules
 - defines Firebase client configuration
 - sets `window.APP_CONFIG.apiBase`
-- contains the login view, request-account form, employee dashboard, and admin dashboard
+- provides the `#root` mount point for the React application
 
 ### `script.js`
 
-Frontend controller.
+React frontend application.
 
+- renders login, account-request, attendance, and admin dashboard views
 - calls Firebase sign-in/sign-out APIs
-- manages auth state and ID tokens
+- manages auth state and ID tokens with React state
 - sends requests to Flask
-- updates the UI for attendance state
 - powers admin tabs for attendance, users, and account requests
 - auto-refreshes admin data periodically
 
@@ -206,7 +206,7 @@ Optional static build helper that generates `dist/`.
 
 - reads `.env`
 - copies static frontend files
-- attempts to inject `FIREBASE_API_KEY` into `index.html`
+- injects `FIREBASE_API_KEY` only when `index.html` contains the `__FIREBASE_API_KEY__` placeholder
 
 ### `netlify.toml`
 
@@ -373,7 +373,7 @@ That means:
 
 - the frontend is presently pointed at a hosted backend URL
 - local frontend/backend development may require changing `apiBase`
-- if you rely on `build.js` for deployment, keep its API-key injection behavior in sync with the actual `index.html` structure
+- `build.js` now copies the React frontend as-is unless a `__FIREBASE_API_KEY__` placeholder is present
 
 ## Operational Notes
 
